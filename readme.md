@@ -42,3 +42,44 @@
 ### Lecture 4 - Introduction to kubeadm
 
 * Whole section same as Section 8 from Learn Devops: The complete Kubernetes Course. going to skip this.refer to that course's notes kubeadm already on our vagrant vm
+
+## Section 4 - Operators
+
+### Lecture 7 - Introduction to Operators
+
+* An Operator is a method of packaging, deploying and managing a K8s Application
+* It puts operational knowledge in an Application
+* It brings the user closer to the experience of managed cloud services rather than having to know all the specifics aof an app deployed in Kubernetes
+* Once an Operator is deployed, it can be managed using CRDs
+* It also provides a great way to deploy Stateful services on K8s (because a lot of complexities are hidden from end-user)
+* CRDs are extensions of the K8s API
+* It allows the K8s user to use custom objects (the kind of obj we use in YAML files) and mod/create/delete them on cluster
+* We can run a kubectl create on a CRD yaml to spin up a db on cluster
+* CRDs are not available in all clusters. they can be dynamically reg/dereg
+* Operators include CRDs
+* etcd, Rook, Prometheus, Vault are examples of technologies that can be deployed as an Operator
+* e.g etcd (distributed key-value store)
+	* once etcd operator is deployed, a new etcd cluster can be created by using the follwoing yaml file
+	```
+	apiVersion: "etcd.database.coreos.com/v1beta2"
+	kind: "EtcdCluster"
+	metadata:
+	  name: "example-etcd-cluster"
+	spec:
+	  size: 3
+	  version: "3.2.13"
+	```
+	* resizing the cluster is a matter of moding the yaml file (+ kubectl apply). same holds for version
+* Using Operators simplifies deployment and management
+* A lot of Sw is released using Operators in K8s (e.g Prostgres)
+* We can build our own operators using the following tools.
+	* The Operator SDK: makes it easy to build an operator, rather than having to learn the Kubernetes API specifis
+	* Operator Lifecycle Manager: oversees installation, updates and management of the lifecycle of all the operators
+	* Operator metering: Usage reporting
+* In this course Operators will be used for deployments
+
+## Section 5 - Rook
+
+### Lecture 8 - Introduction to Rook
+
+* 
