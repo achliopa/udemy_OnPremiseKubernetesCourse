@@ -151,7 +151,7 @@
 * After that, block / file / object storage can be configured
 	* Using the rook API and K8s storage API - using this storage API means using rook storage will become as easy as using for example AWS EBS on NFS
 
-### Lecture 11 - Demo: Rook with Ceph
+### Lecture 11 - Demo: Rook with Ceph (Part I)
 
 * we log in to our master node in digital ocean
 * we will add 2 more nodes in digital ocean for this section (we follow th kubeadm way)
@@ -175,4 +175,52 @@ kubectl create -f rook-cluster.yaml
 * i vim mysql-demo.yml. a service with a persistentvolumeclaim on rook-block storageclass and a deployment
 * i apply it and see kubectl get pv (i see 3 volumes one per node only one is bound the others are redundant)
 
-### Lecture 12
+### Lecture 12 - Demo: Rook with Ceph (Part II)
+
+* we will put some data in mysqlDB that i will survive a pod crash
+* i log in mysql pod `kubectl exec -it demo-mysql-7fbfff59d9-9s475 -- bash`
+* i start mysql client `mysql -u root -pchangeme`
+* i create some data `create database demo; use demo; create table helloworld(id int, hello varchar(100)); insert into helloworld values (1, 'world');`
+* i confirm insertion `select * from helloworld;` and exit `\q`
+* i will check where this pod is running on with -o wide. it runs on node 2
+* i want to make sure that if the pod gets killed it will not be scheduled to node-2 `kubectl cordon kubernetes-node-02`. if get pods i see that scheduling is disabled on node-02. a real test scenario is to take down the node completely to see what happns
+* i delete the pod ` kubectl delete pod demo-mysql-7fbfff59d9-9s475` a new one is created in node-03
+* i log in and go to mysql to check the query. SUCCESS
+* i can completely shutdown node-02 `shutdown -h now` i retest and all is ok
+* true HA is achieved if in app level there are checks for fast switchover (MYsql master - slave) as switchover in k8s is not instant. 
+* if i go in tools pod and check status i see the node lost (OSD)
+
+### Lecture 13 - Demo: Rook with Object Storage
+
+* we ll see how to enable object sotrage in rook
+* we switch on the node-02 from digital ocean and uncordone it from master `kubectl uncordon kubernetes-node-02`
+* i vim rook-storageclass-objectstore.yaml. it sets a ObjectStore CRD using an s3 gateway (s3 compatible) so that our app can use an s3 client
+* i get pods in namespace rook and see the  new pod running rook-ceph-rgw-my-store which comes with a service. this service is the s3 gateway to be used in the k8s cluster
+* i log in the rook-tools pod `kubectl exec -it rook-tools -n rook -- bash` and create a new s3 user `radosgw-admin user create --uid rook-user --display-name "A rook rgw User" --rgw-realm=my-store --rgw-zonegroup=my-store`
+* like in AWS s3 i have an access key and a secret key. i can configure env vars to use them to connect to the s3 object store
+* in rook-tools pod bash console i expose them as env vars
+```
+export AWS_HOST=rook-ceph-rgw-my-store.rook #service hostname
+export AWS_ENDPOINT=10.97.30.45 # service ipaddress
+AWS_ACCESS_KEY=ER748GC9EYLA13YMMLZ2 # key appears in user yaml olog after creation
+AWS_SECRET_ACCESS_KEY=ck0LyAJ7RPpdtwCpIZErJiv17YVYCft3rZ2NPACO # same as above
+```
+* we can use s3cmd (in rook-tools) `s3cmd --help`
+* i use it to create an s3 bucket `s3cmd mb --no-ssl --host=${AWS_HOST} --host-bucket= s3://demobucket`
+* to test it i create a file `echo 'hello world' > test` `cat test`
+* i will put this file in s3 `s3cmd put test --no-ssl --host=${AWS_HOST} --host-bucket= s3://demobucket`
+* if i ls the bucket `s3cmd ls --no-ssl --host=${AWS_HOST} --host-bucket= s3://demobucket` is see the test file
+
+### Lecture 14 - Demo: Rook with File Storage
+
+* i vim rook-storageclass-fs.yaml in manster node. i have a FileSystem CRD replicated and named myfs using a metadata server. i apply it . 2 pods are added to rook ns
+* i vim fs-demo.yaml. an ubutnu pod using myfs as nfs in /data path
+* i apply it and log in the ubuntu pod `kubectl exec -it ubuntu -- bash` and type `mount |grep data`. i see the 3 replicas mount on /data.
+* i can use /data as anormal fs
+* in anycase object dtorage is preferable
+
+## Section 6 - Manage TLS Certificates
+
+### Lecture 15 - Introduction to cert-manager
+
+* 
