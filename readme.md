@@ -339,3 +339,83 @@ spec:
 * i do the production cert. `vim certificate-prod.yml` adding our domain name.
 * i apply it and get an error as a certiicate with same name exists. i delete the old one `kubectl delete -f certificate-staging.yml` the new cert is stored in secrets as myapp-tls-prod. we need to mod the myapp-ingress.yml to use the new secret
 * we repally and test https://myapp.agileng.io. it works and its GREEN!! its valid for 3months though
+
+## Section 7 - Authentication with Dex (OIDC)
+
+### Lecture 18 - Introduction to dex
+
+* Dex is an Identity Service
+* It uses OpenID Connect (OIDC)
+* Kubernetes can use Dex to authenticate its users (using OIDC)
+* Dex uses connectors to authenticate a user using another Identity Provider
+* This allows us to use Dex to authenticate users in Kubernetes using LDAP, SAML, Github, Microsoft etc
+* the architecture is:
+	* a user wants to communicate with K8s. he can do it using keys (thats what we are doing so far with kubeadm which ives us an admin certificate)
+	* its not easy to distribute certificates to users (and install them on their machines). OIDC solves that and is supported by K8s
+	* in enterprises and companies OIDC is not always available. Dex solves that
+	* we tell K8s to use OIDC and we point it to Dex. Dex will then go to the configured backend (one of the providers we mentioned) using connectors.
+	* Dex will give a token (OIDC) to the user. user will use the token to authenticate in K8s
+* Most companies already have a user directory. using OpenLDAP, Microsoft Active Directory (LDAP compatible) or similar products
+* LDAP stands for Lightweight Directory Access Protocol
+* Its very uncommon for companies to have an OpenID Connect implementation we can use
+* that is why we have to use software like Dex. that will act as a bridge between what enterprises offer for authentication and what K8s can use today
+
+### Lecture 19 - Kubernetes OpenID Connect (OIDC) explained
+
+* The OIDC flow( cp from lec 9 of adv kubernetes course:
+	* User=>Identity Provider: Login to IdP
+	* IdP=>User: provide access_token, id_token and refresh_token
+	* User=>Kubectl: call kubectl with token being the id_token OR add tokens to. kubectl/config
+	* kubectl=> API server: Authorization: Bearer...
+	* APi server: is JWT signature valid?
+	* API server: Has the JWT expired? (iat+exp)
+	* API server: User Authorized?
+	* API server=> kubectl: Authorized: perform action and return result
+	* Kubectl=>User: Return result
+* in our case identity provider is dex
+* token will be provided if the backend service (github, ldap etc) authenticates successfully the user
+
+### Lecture 20 - Demo: Dex with Github (Part I)
+
+* in my cluster master node i go to on-prem-or-cloud-agnostic-kubernetes/dex
+* i go to README for instruction ( alot!!!!) OIDC is prone to errors and tough to set up
+* first we will install dex
+* to make it work we need to generate  a new certificate with gencert.sh script. in it we need to put our dnsname which we mod to point to our cluster (dex.agileng.io) anso we need to add an Arecord with node-01 ip in namecheap for this host (dex)
+* we run `./gencert.sh`. the certificates are placed in ./ssl dir
+* we create a namespace called dex `kubectl create -f dex-ns.yaml`
+* we create a Secret `kubectl create secret tls dex.agileng.io.tls -n dex --cert=ssl/cert.pem --key=ssl/key.pem` placing in it the certificate and the key
+* we move the ca.pem from ssl to kubernetes `sudo cp ssl/ca.pem /etc/kubernetes/pki/openid-ca.pem`
+* we now need to create a secret for github. we need to configure oAuth in github first
+* we need to have an organization in our name to do it.
+* we go to our organization => settings => oAuth Apps => register an App
+* we name it: kubernetes dex
+* the homepage url: http://dex.agileng.io
+* the authorization callback: https://dex/agileng.io:32000/callback
+* Register application
+* we now see the client ID and Client Secret
+* we export both as `export GITHUB_CLIENT_ID=<Client ID>` and `export GITHUB_CLIENT_SECRET=<Client Secret>`
+	* i am now ready to create the secret for Github in the cluster dex namespace
+```
+kubectl create secret \
+    generic github-client \
+    -n dex \
+    --from-literal=client-id=$GITHUB_CLIENT_ID \
+    --from-literal=client-secret=$GITHUB_CLIENT_SECRET
+```
+* i can see the secret as YAML `kubectl edit secret github-client -n dex` where IDs are base64 encoded
+* we now need to edit the kube-apiserver manifest file to tell our cluster to use oidc adding the lines below to the `sudo nano  /etc/kubernetes/manifests/kube-apiserver.yaml`: 
+```
+    - --oidc-issuer-url=https://dex.agileng.io:32000
+    - --oidc-client-id=example-app
+    - --oidc-ca-file=/etc/kubernetes/pki/openid-ca.pem
+    - --oidc-username-claim=email
+    - --oidc-groups-claim=groups
+```
+* we use nanao as vim has a bug. we add it be gore image: attr
+* we check with `sudo docker ps -a |grep kube-apiserver` checking for docker running processes named kube-apiserver and see it in the list
+* we told kubectl to use oidc but we can still login and issue commands. how is that? as we still have the ~/.kube/config file withthe cluster admin certificates
+* we are ready to start our dex server with  dex.yaml. it creates a service account for dex server. a cluster role (dex specific to create CRDs in cluster) and a clusterolebinding. then a deployment of the server where serviceaccount is used. we reduce replicas to 1 as we have 1 node. it uses volumes. as env vars it uses the github ids (3 volumes, one for config 1 for ldap 1 for tls). and add a config map. 1 for ldap (we will fill it later) and 1 for dex. there we mod the domain to our clusters domainname. the staticclients is the app we speced in apiserver. the http ip onport 5555 has to be our clusters master node ip. we can enable a local passwordDB to store locally usernamesand paswords if we want (Beware of GDRP). also we config the service as nodeport
+
+### Lecture 21 - Demo: Dex with Github (Part II)
+
+* we save and create dex.yml
