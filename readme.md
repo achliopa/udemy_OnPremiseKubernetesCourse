@@ -223,4 +223,119 @@ AWS_SECRET_ACCESS_KEY=ck0LyAJ7RPpdtwCpIZErJiv17YVYCft3rZ2NPACO # same as above
 
 ### Lecture 15 - Introduction to cert-manager
 
-* 
+* if we want to use a secure http connection (https) we need to have certificates
+* those certificates can be bought, or can be issued by some public cloud providers, like AWS's Certificate Manager
+* Managing SSL/TLS certificates ourselves often takes a lot of time and are time consuming to install and extend
+* We cannot issue our own certificates for production websites. they are not trusted by the common internet browsers 
+* Cert-manager can ease the issuing of certificates and the management of it
+* Cert-manager can use letsencrypt
+* Letsencrypt is a free, automated ans open Certificate Authority
+* Lets encrypt can issue certificates for free for our app or website
+* we need to prove to lets encrypt that we are the owner of a domain and they will issue a certificate for us
+* the cerificate is recognized by major sw vendors and browsers
+* cert-manager can automate the verification process for lets encrypt
+* with lets encrypt we have to renew certificates every couple of months
+* cert-manager will periodically check the validity of the certificates and will start the renewal process if necessary
+* Lets encrypt + cert manager takes away a lot of hassle to deal with certificates allowing us to secure our endpoints in an easy affordable way
+* we can only issue certificates for a domain name we own
+* Cert-manager architecture:
+	* Issuers (object): letsencrypt-staging, letsencrypt-prod,vault-prod(coming soon)
+	* cert-manager (communicates with issuers and issues certificates)
+	* Certificates: foo.bar.com(ussuer: letsencrypt-staging) www.example.com, example.com(issuer: letsencrypt-prod)
+	* Kubernetes-secrets: signed keypair (per certificate)
+* staging is for dev, prod is for production
+
+### Lecture 16 - Demo: cert-manager (Part I)
+
+* we'll see how to use cert-manager to issue certificates from letsencrypt
+* i am in master node.
+* in on-prem-or-cloud-agnostic-kubernetes/helm we need to install helm first
+* in README there are instruction. i will install helm client on master node `curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash`
+* our cluster is rbac enabled (defautl) so we need to apply the rbac-config.yml (install tiller and give priviledges)
+* we are ready to init helm `helm init --service-account tiller`
+* we go to ../cert-manager and see the README for instruction
+* we need first an ingress controller (without LB) we will use helm to install it
+```
+helm install --name my-ingress stable/nginx-ingress \
+  --set controller.kind=DaemonSet \
+  --set controller.service.type=NodePort \
+  --set controller.hostNetwork=true
+```
+* this intall installs an ingress controller in each node. for big clusters we dont need DeamonSet. just a Deploym,ent with some instances
+* we dont use LB (a LB agnostic cluster) so NodePort is OK. it will expose port 80 and 443 on each node through ingress controller
+* to delete installation `helm del --purge my-ingress` and `helm del --purge cert-manager`
+* i get pod to see the ingress controller(s)
+* i `kubectl edit pod my-ingress-nginx-ingress-controller-nbvxw ` and see there is a hostPort on 80 and 443
+* to access externally our cluster we need to add these ports to the firewall
+
+### Lecture 17 - Demo: cert-manager (Part II)
+
+* in DigitalOCean i mod my firewall adding HTTP and HTTPS fro all Ips
+* skipping this step will cause the ssl ert to fail as letsencrypt uses these ports to comm with our ip address for verification
+* we continue with README instr. we will create an app and add ingress rule (myapp.yml and myapp-ingress.yml) a demo app as a Deployment and an Ingress Rule for the app (at myapp.agileng.io on our domain)
+* i need to add the ip to our dns provider. i will choose node-01 ip from digital ocean to add it to our DNS panel in namecheap. 
+* the problem with digital ocean is that the ips are not static. if node is down they change. the solution is to enable floating IP address in the node-01. this floating ip will move from one node to the other if any one is down
+* in namecheap i add an A record withhost (myapp) and Ip the ip of node-01
+* another option is to put a loadbalancer in front of the cluster and use its ip address
+* i hit myapp.agileng.io and it works
+* i am finally ready to create the cer-manager in my cluster (!!!) . i use helm
+```
+helm install \
+    --name cert-manager \
+    --namespace kube-system \
+    stable/cert-manager
+```
+* cert-manager is installed sucessfully. the log gives us directions on how to issue our certs
+* 2 ready scripts are available. issuer-staging.yml and issuer-prod.yml
+* ALWAYS start with staging...
+```
+apiVersion: certmanager.k8s.io/v1alpha1
+kind: Issuer
+metadata:
+  name: myapp-letsncrypt-staging
+  namespace: default
+spec:
+  acme:
+    # The ACME server URL
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    # Email address used for ACME registration
+    email: your@email.inv
+    # Name of a secret used to store the ACME account private key
+    privateKeySecretRef:
+      name: myapp-letsncrypt-staging
+    # Enable HTTP01 validations
+    http01: {}
+
+```
+* in both ymls we put our email address
+* i apply staging and production issuer CRDs
+* the i `vim certificate-staging,yml` that contains the Certificate CRD. the certificate will be stored in a secret. also put our domains credentials in yaml
+```
+apiVersion: certmanager.k8s.io/v1alpha1
+kind: Certificate
+metadata:
+  name: myapp
+  namespace: default
+spec:
+  secretName: myapp-tls-staging
+  issuerRef:
+    name: myapp-letsncrypt-staging
+  commonName: myapp.agileng.io
+  #dnsNames:
+  #- www.myapp.newtech.academy
+  acme:
+    config:
+    - http01:
+        ingress: myapp
+      domains:
+      - myapp.agileng.io
+      #- www.myapp.newtech.academy
+
+```
+* i apply it and check with `kubectl get certificate` and `kubectl describe certificate myapp` and see the complete history of the certificate. with `kubectl describe ingress` i see it was updated when cert was created (rule injection)
+* staging certs are not recognized by browsers. are only for testing
+* to configure the cert i config the Ingress rule `vim myapp-ingress.yml` enabling the tls section
+* i check https://myapp.agileng.io (it works but marked not safe)
+* i do the production cert. `vim certificate-prod.yml` adding our domain name.
+* i apply it and get an error as a certiicate with same name exists. i delete the old one `kubectl delete -f certificate-staging.yml` the new cert is stored in secrets as myapp-tls-prod. we need to mod the myapp-ingress.yml to use the new secret
+* we repally and test https://myapp.agileng.io. it works and its GREEN!! its valid for 3months though
