@@ -418,4 +418,64 @@ kubectl create secret \
 
 ### Lecture 21 - Demo: Dex with Github (Part II)
 
-* we save and create dex.yml
+* we save and create dex.yml. we check the pod in namespace dex. the server is up
+* we need to run an example-app. (we speced in dex server and in apiserver). it is a frontend that coreos provides us.
+* it is a basic ui. we should build our own if used in production (an authentication site or script) that comms with the dex software. or we can use a OIDC compatible frontend software
+* we need go as the app is in golang `sudo apt-get install make golang-1.9`
+* we clone the dex.git `git clone https://github.com/coreos/dex.git`
+* `cd dex` and checkout branch `git checkout v2.10.0` i am now in v2.10
+* i export go in path `export PATH=$PATH:/usr/lib/go-1.9/bin` and test `go version`
+* i get the dependencies `go get github.com/coreos/dex`
+* i now can build the example app `make bin/example-app`
+* i need to export my ip address (master) `export MY_IP=$(curl -s ifconfig.co)`
+* i can now run the example app
+```
+./bin/example-app --issuer https://dex.agileng.io:32000 --issuer-root-ca /etc/kubernetes/pki/openid-ca.pem --listen http://${MY_IP}:5555 --redirect-uri http://${MY_IP}:5555/callback
+```
+* the app is now listening on port 5555 of master
+* i open a second terminal and go to on-prem-or-cloud-agnostic-kubernetes/dex
+* i now have to add a user applying the user.yaml. it is a user with arole that only can list pods. we need to enter the email of our sample user to bind to this role (our github account email). i create the user 
+* we now have to set the credentials. to get the token we need to go the url our example-app is listening to http://<masternodeip>:5555
+* we hit it with our browser and see the login page
+* we click access offline (it has to do with the need to refresh the token or not) and hit login 
+* we proceed and we are redirected to github. we authrize the app
+* we go back to example up with the token plain on screen (and the refresh token we can use to get a new token without loging in). its a jwt token
+* we cp the token and export it as `export TOKEN="thetokenhash"`
+* i can now set the credetials for a developer user `sudo kubectl config set-credentials developer --auth-provider=oidc --auth-provider-arg=idp-issuer-url=https://dex.agileng.io:32000 --auth-provider-arg=client-id=example-app --auth-provider-arg=idp-certificate-authority=/etc/kubernetes/pki/openid-ca.pem  --auth-provider-arg=id-token=${TOKEN}`
+* we now need to create a new context `kubectl config set-context dev-default --cluster=kubernetes --namespace=default --user=developer`
+* and use the new context `kubectl config use-context dev-default` as we want a context where only oidc is used for auth
+* now any action is forbidden only get pods is allowed
+* the downside with using the example-app is that if i need anew token i need to cp it again and export it. it should be automated. or we write our app. 
+* or we can config autorenowal of the token (not secure) For autorenewal, you need to share the client secret with the end-user (not recommended)
+
+### Lecture 22 - Demo: DEX with LDAP
+
+* we are still in on-prem-or-cloud-agnostic-kubernetes/dex on master node
+* in README are the instructions
+* we will install LDAP locallly for testing (on master node) `sudo apt-get -y install slapd ldap-utils gnutls-bin ssl-cert`
+* i reconfig LDAP `sudo dpkg-reconfigure slapd` to create DB in LDAP choose NO
+* we name it example.com (fake domain) choose MDB and choose to remove the old DB
+* dex wants to use encrption to avoid sending plain passwords over the network we use gencert-ldap.sh that creates certs for LDAP. we use a fake domain. we can use our own for production. 
+* I run the script and get the certs
+* Now that I have certificates i can add to the config that certs are configured. i look in ./ldap/certinfo.ldif
+* ldif is a format of LDAP. in the file ihave the certs location
+* i add the ceetrs in ldap `sudo ldapmodify -H ldapi:// -Y EXTERNAL -f ldap/certinfo.ldif`
+* i apply a users.ldif with the users accounts in ldap `ldapadd -x -D cn=admin,dc=example,dc=com -W -f ldap/users.ldif`
+* i need a last piece of config `sudo vim /etc/default/slapd` adding ldaps:/// in services (secure ldap)
+* we need to restart slapd `sudo systemctl restart slapd.service`
+* we are ready to test if ldap works `sudo vim /etc/hosts` and add ldap01.example.com in localhost `127.0.0.1 localhost ldap01.example.com`
+* i can now check if the added user exists `ldapsearch -c -D 'uid=serviceaccount,ou=People,dc=example,dc=com' -w 'serviceaccountldap' -H ldap://ldap01.example.com -ZZ -b dc=example,dc=com 'uid=john' cn gidNumber` i get the user back
+* if i use localhost instead the certs dont match and i get an error. i can also check with ldaps on port 636 `ldapsearch -c -D 'uid=serviceaccount,ou=People,dc=example,dc=com' -w 'serviceaccountldap' -H ldaps://ldap01.example.com:636 -b dc=example,dc=com 'uid=john' cn gidNumber`
+* -ZZ flag stand on applying SSL on standard ldap
+* we need to switch back to standard context in our cluste to be able to issue commands `sudo kubectl config use-context kubernetes-admin@kubernetes`
+* we need to add ldap to dex editing the configmap `kubectl edit configmap ldap-tls -n dex` adding the cacert.pem location ( i get the location from ldap/certinfo.ldif) and cp the cert from the location `cat /etc/ssl/certs/cacert.pem` replacing empty with the actual cert (keeping indentation as it is a YAML)
+* ldap-tls secret will use this in configmap `vim dex.yaml`. we need to override the ConfiugMap in this file
+* we use the configmap-ldap.yaml. we add master node ip and domain. in this YUAML is the connector between dex and ldap togetther with slapd specific config of you dex will use the ldap info. we apply the config map that configs the configmap.dex
+* i apply dex.yaml (i changed domainname)
+* i delete all pods `kubectl delete pods -n dex -all`
+* i am ready to test again staring the example-app `./bin/example-app --issuer https://dex.agileng.io:32000 --issuer-root-ca /etc/kubernetes/pki/openid-ca.pem --listen http://${MY_IP}:5555 --redirect-uri http://${MY_IP}:5555/callback`
+* i go to login (now it has an ldap option)
+* i enter user:john pasword: johnldap and get a loginerror
+* i get the logs of the dex pod `kubectl logs dex-55ffcc4577-wq4bv -n dex` and see the msg `msg="Failed to login user: failed to connect: LDAP Result Code 200 \"\": dial tcp 127.1.2.3:636: getsockopt: connection refused"`
+* i check in configmap-ldap.yaml for ldap01... i have to see if host is configured ok `cat /etc/hosts|grep ldap` so ldap is running on localhost not 127.1.2.3 set in  dex deploy config `kubectl edit deploy dex -n dex` i se the host ip to the external ip of the master. save restar tthe pod and retest and i have the token!!!!!!!!!!!!!!!
+* i have now to change context set it as env var and use it as the github to connect to k8s....
