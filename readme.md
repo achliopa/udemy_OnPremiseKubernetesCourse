@@ -480,4 +480,41 @@ kubectl create secret \
 * i check in configmap-ldap.yaml for ldap01... i have to see if host is configured ok `cat /etc/hosts|grep ldap` so ldap is running on localhost not 127.1.2.3 set in  dex deploy config `kubectl edit deploy dex -n dex` i se the host ip to the external ip of the master. save restar tthe pod and retest and i have the token!!!!!!!!!!!!!!!
 * i have now to change context set it as env var and use it as the github to connect to k8s....
 
-## Section 
+## Section 8 - Istio
+
+### Lecture 23 - Introduction to Envoy
+
+* When we break a monolith application (1codebase) into micro-services (multiple codebases) we end up with lots of services that need to communicate with each other
+* These communications between services need to be able to be fast, reliable and flexible
+* To be able to implement this we need a service mesh
+* A service mesh is an infrastructure layer for handling these service-to-service communications
+* This is usually implemented using proxies
+* Proxies manage these communications and ensure they are fast, reliable and flexible
+* Envoy is such a proxy, designed for cloud native applications (originaly built at Lyft)
+* Envoy is a high performance distributed proxy written in C++.
+* We can see it as an iteration of the NGINX,HAProxy, hardware/cloud load balancers
+* It is comparable with Linkerd. although opverlapping each has its own feats
+* Envoy feats:
+	* Small mem footprint
+	* HTTP/2 and gRPC support
+	* transparent HTTP/1.1 to HTTP/2 proxy (Not all browsers support HTTP/2 yet. incoming requests can be HTTP/1.1 and internally requests can be HTTP/2)
+	* Advanced Loadbalancer Feats (auto retries, circuit breaking, rate limiting, request shadowing, zone load balancing, ...)
+	* Configuration can be dynamically managed using an API
+	* Native support for distributed tracing
+* Linkerd has more feats. but needs a higher CPU and memory
+* LInkerd is built on top of Netty and Finagle (JVM based)
+* More Feats? Linkerd. Speed and low resource consumption? Envoy
+* Istio gives the best of both worlds
+* Linkerd integrates with Consul and Zookeeper for service discovery
+* Envoy supports hot reloading using an API. Linkerd not (by design)
+
+### Lecture 24 - Introduction to Istio (part I)
+
+* Istio is an open source platform to connect, manage and secure microservices
+* Key capabilities:
+	* Supports Kubernetes
+	* Can control traffic between services, can make it more robust and reliable
+	* Can show dependencies and flow between services
+	* Provides access policies and authentication in the service mesh
+	* Istio [Architecture](https://istio.io/docs/concepts/what-is-istio/arch.svg):
+		* 2 planes (Control and Data)
