@@ -479,3 +479,5 @@ kubectl create secret \
 * i get the logs of the dex pod `kubectl logs dex-55ffcc4577-wq4bv -n dex` and see the msg `msg="Failed to login user: failed to connect: LDAP Result Code 200 \"\": dial tcp 127.1.2.3:636: getsockopt: connection refused"`
 * i check in configmap-ldap.yaml for ldap01... i have to see if host is configured ok `cat /etc/hosts|grep ldap` so ldap is running on localhost not 127.1.2.3 set in  dex deploy config `kubectl edit deploy dex -n dex` i se the host ip to the external ip of the master. save restar tthe pod and retest and i have the token!!!!!!!!!!!!!!!
 * i have now to change context set it as env var and use it as the github to connect to k8s....
+
+## Section 
