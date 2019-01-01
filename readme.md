@@ -569,3 +569,10 @@ echo 'export PATH="$PATH:/home/ubuntu/istio-0.7.1/bin"' >> ~/.profile
 * we run `kubectl get svc -n istio-system` to see the nodeport POrt of ingress. we hit it with the browser at http://157.230.100.95:31777/productpage (we saw the ingress config for the route)
 * the page is composed by 2 services output [archiotecture](https://istio.io/docs/examples/bookinfo/)
 * if we refresh we hot a different version
+
+### Lecture 27 - Demo: Redirecting Traffic with Istio
+
+* in our example app with 3 microservices we have service A and service B v1 and B v2 all run in istio
+* all 2 services have envoy proxies
+* this is common scenario to have 2 versions of service old a new and to want to test the new service  by some users before going it to production and replacing v1
+* istioclt will be use to modify routing between envoys from service A to service B v2 instead of v1
