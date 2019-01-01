@@ -593,3 +593,75 @@ echo 'export PATH="$PATH:/home/ubuntu/istio-0.7.1/bin"' >> ~/.profile
 * we install jaeger `kubectl apply -n istio-system -f https://raw.githubusercontent.com/jaegertracing/jaeger-kubernetes/master/all-in-one/jaeger-all-in-one-template.yml`
 * jaeger query tries to start a load balancer. we mod it to nodeport and get the ip to hit it with browser
 * i create trace by visiting the app. refresh jaeger and see the service
+
+## Section 9 - Calico
+
+### Lecture 29 - Introduction to Calico (Part I)
+
+* Calico provides secure network connectivity for containers and virtual machine workloads
+* Nodes are connected with a Physical network (e.g DigitalOcean network) and have IPs e.g 10.23.24.5 and 10.23.24.6
+* On the nodes we run kubernetes. the pods on the nodes that contain the apps have also IPs e.g 192.168.100.2 and 192.168.100.3. this is a separate network. the physical network is agnostic of this nw
+* interpod comm on same node is easy. when we want a pod to communicate with a pod on a different node comm has to go over the physical nw that knows nothing  about pod nw...
+* To solve the problem we have to install a Container Network Interface (CNI) e.g Calico or  Flannel or weave etc
+* CNI builds the interpod NW
+* Calico is a Software Defined Network, with a simplified model with cloud-native in mind
+* Calico creates a flat Layer3 network using BGP (Border Gateway Protocol) as Routing Mechanism. BGP is used as the Internet ROuting Protocol to route between providers (a proven scalable tech)
+* Calico provides policy driven nw security using the L8s Network Policy API. It provides Fine Grain control over the network, using the K8s API (with YAML files) as we are used to
+* Calico  only use overlay if necessary, reducing overhead and increasing performance. an overlay NW does IP encapsulation. ofthe those IP packets can be routed without adding those extra headers to IP packets
+* Calico works with K8s, OpenStack, Mesos etc
+* Calico uses etcd (K8s also uses etcd, a distributed key-val store using raft concensus)
+* Calico  works on major cloud providers (supports also hosted K8s services AWS EKS and Azure AKS ) also on enterprise environments
+	* either without overlay
+	* with IP-in-IP tunneling
+	* ore using an overlay (VxLAN) network like Flannel
+* In digital ocean if we DOnt use firewall we can use IP-in_IP tunneling. if we use firewall we cannot so we have to use overlay (e.g FLannel)
+* WHen we own the network and firewall then IP-in-IP tiunneling is the best way
+
+### Lecture 30 - Introduction to Calico (Part II)
+
+* The [Architecture](https://www.projectcalico.org/wp-content/uploads/2018/01/ProjectCalico.v3.datasheet.pdf):
+	* A DB to store etcd
+	* calicoctl is used to communicate with the DB
+	* on every node we will have a daemon running (Felix)
+	* Felix comms with Linux kernel to set IP and routing tables. Felix runs nets to our container or workload
+* Calicoctl: allows us to manage the Calico network and security policy
+* Felix: is a daemon that runs on every machine (in calico-node DaemoSet). it is responsible for programing routes and ACL on thenodes itself. it does interface management (interacts with kernel - does MAC address / IP level config). It reports on s tate and health of NW
+* BGP Client (BIRD): Runs next to  Felix (in the calico-node DeamonSet), Reads routing state that Felix programmed and distributes this info to other nodes. BGP needs to make other nodes aware of routing information to ensure traffic is efficiently routed
+* BGP Route Deflector: All BGP clients are connected to each other, this can become a limiting factor. In larger deployments a BGP route reflector might be setup. it acts as a central point where BGP  clients connect to (instad of having a mesh topology)
+* Once Calico is setup we can createa NW policy in K8s
+* We can first createa NW policy to deny all access to all pods (and after open the ports that are needed)
+```
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: deny-all
+  namespace: apps
+spec:
+  podSelector:
+    matchLabels: {}  
+```
+* at his point pods are isolated. we'll not be able to connect from one pod to the other
+* Isolated vs Non-Isolated
+	* by default pods are non-isolated. they acceopt traffic from any source
+	* by having a nw policy with a selector that selects them (the prev selects all pods) network access is denied by default. pod becomes isolated. only connections defined in nw policy are allowed. this is on namespace basis
+* we can add a new rule to enable nw access to a pod
+```
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-my-app
+  namespace: apps
+spec:
+  podSelector:
+    matchLabels:
+      app: my-app
+  ingress:
+    - from:
+      - podSelector:
+          matchLabels:
+            app: a-pod 
+```
+
+### Lecture 31 - Demo: ingress Network Policies
+
+* 
