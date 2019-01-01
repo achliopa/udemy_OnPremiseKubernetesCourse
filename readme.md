@@ -576,3 +576,20 @@ echo 'export PATH="$PATH:/home/ubuntu/istio-0.7.1/bin"' >> ~/.profile
 * all 2 services have envoy proxies
 * this is common scenario to have 2 versions of service old a new and to want to test the new service  by some users before going it to production and replacing v1
 * istioclt will be use to modify routing between envoys from service A to service B v2 instead of v1
+* an example is to mod based on acookie coming from a user
+* i am still in master in istio directory
+* we use istioctl to apply a route as a YAML file `istioctl create -f samples/bookinfo/routing/route-rule-all-v1.yaml`
+* this yaml file creates a VirtualService (istio CRD) for each microservice. then we create Destination Rules labeling the services. Virtual services make the connection between services specifing the destination
+* we apply the rules and test in browser. i see v1 of reviews even if i refresh
+* we apply new rules to test v2 if rule matches `istioctl replace -f samples/bookinfo/routing/route-rule-reviews-test-v2.yaml` the yaml. it uses a match rule based on cookies. we test it we see v1. when we log as jason. we see v2! sweet!
+* we apply new rules to route 50% of traffic to v1 and 50% to v3 `istioctl replace -f samples/bookinfo/routing/route-rule-reviews-50-v3.yaml` using the destination: attr and weight: attr
+
+### Lecture 28 - Demo: Distributed Tracing with Zipkin and Jaeger
+
+* we install zipkin using a script `kubectl apply -f install/kubernetes/addons/zipkin.yaml`
+* we config some proerties using svc edit `kubectl edit svc zipkin -n istio-system` changing Servicetype from ClusterIP to NodePort. we get the ip and hit it from browser. we generate some trace by visiting the app and see it in zipkin. also we can see depnedencies within microservices
+* Zipkin comes with instio installation as ana addon. jaeger is separate installation
+* to install jaeger we delete zipkin `kubectl delete -f install/kubernetes/addons/zipkin.yaml`
+* we install jaeger `kubectl apply -n istio-system -f https://raw.githubusercontent.com/jaegertracing/jaeger-kubernetes/master/all-in-one/jaeger-all-in-one-template.yml`
+* jaeger query tries to start a load balancer. we mod it to nodeport and get the ip to hit it with browser
+* i create trace by visiting the app. refresh jaeger and see the service
