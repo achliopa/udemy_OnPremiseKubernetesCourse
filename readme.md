@@ -547,3 +547,25 @@ kubectl create secret \
 	* Comm from Service A to B and C goes through the envoys
 
 ### Lecture 26 - Demo: Istio
+
+* i am in my Digital Ocean master node at ~/on-prem-or-cloud-agnostic-kubernetes/istio
+* I see the README for instructions
+* we download istio and install it on master (on home dir)
+```
+wget https://github.com/istio/istio/releases/download/0.7.1/istio-0.7.1-linux.tar.gz
+tar -xzvf istio-0.7.1-linux.tar.gz
+cd istio-0.7.1
+echo 'export PATH="$PATH:/home/ubuntu/istio-0.7.1/bin"' >> ~/.profile
+```
+* i logout and login and use `istioctl` . IT WORKS
+* I will now deploy istion in the cluster. i can deploy with or without mutual TLS. this applies to inter envoy comm
+* to do debuggin its easier if not using tls `kubectl apply -f install/kubernetes/istio.yaml` (we run it 2 times because of a bug)
+* we have now istio running. we will deploy our example app
+* we first edit the istio-ingress `kubectl edit svc istio-ingress -n istio-system` 
+* we change LoadBalancer to NodePort for accessing the ingress controller
+* we deploy the sample app using istioctl `kubectl apply -f <(istioctl kube-inject --debug -f samples/bookinfo/kube/bookinfo.yaml)` kube-inject injects the envoy proxy in anormal kubernetes app (bookinfo.yml)
+* we vim into bookinfo.yaml. its multiple service+deployment of the microservices composing the app + ingress rules
+* we check the product page pod YAML config with `kubectl edit pod productpage-v1-bd578b9c8-jnzbf` we see the image pod config and the envoy proxy container
+* we run `kubectl get svc -n istio-system` to see the nodeport POrt of ingress. we hit it with the browser at http://157.230.100.95:31777/productpage (we saw the ingress config for the route)
+* the page is composed by 2 services output [archiotecture](https://istio.io/docs/examples/bookinfo/)
+* if we refresh we hot a different version
