@@ -516,5 +516,34 @@ kubectl create secret \
 	* Can control traffic between services, can make it more robust and reliable
 	* Can show dependencies and flow between services
 	* Provides access policies and authentication in the service mesh
-	* Istio [Architecture](https://istio.io/docs/concepts/what-is-istio/arch.svg):
-		* 2 planes (Control and Data)
+* Istio [Architecture](https://istio.io/docs/concepts/what-is-istio/arch.svg):
+	* 2 planes (Control and Data)
+	* On top we have the Control Plane API containing:
+		* The Istio-Auth: Sends TLS Certs to Envoys
+		* The Pilot: Sends config data to Envoys
+		* The Mixer: Does Policy Checks. receives Telementryform envoys
+	* The Bottom Plane is the Data with the various Services (Pod+Interface) that contain
+		* The actual Service
+		* An envoy Proxy that handles all communication to and from the Service
+		* It supports HTTP/1.1, HTTP/2, gRPC, TCP w/ or wout/ TLS
+* Istio Components:
+	* Envoy(data plane): istio uses the Envoy proxy in ots data plane. It uses a sidecar deployment, which means a deployment along the application (a one to one relation between a/pod and provy)
+	* Mixer (control plane): repsponsible for enforcing access control and usage policies, collects telemetry data from the envoy
+	* Pilot(control plane): responsible for service discovery, traffic managements and resiliency, A/B tests and Canary deployments, timeouts, retries, circuit breakers. it does this by converting Istio rules to Envoy configurations
+	* Istio Auth (control plane): Service-toservice and end-user authentication using mutual TLS
+
+### Lecture 25 - Introduction to Istio (part II)
+
+* Example Service Mesh app: 
+	* We have my-app with 3 microservices in the Kubernetes CLuster. 
+	* Serice A has 3 replicas , Service B and C 2 replicas
+	* Service A is in python, Service B in golang and service  C in Java
+	* Serice A communicates with Service B and C
+* Example Service Mesh app w/ nginx ingress controllers
+	* Communication from service A to B or C goes through the Ingress Controller (router)
+* Example Service Mesh App with Istio
+	* Each Service pod has its envoy (sidecar deployment)
+	* Envoys comm with Istio Control plane for COnfig
+	* Comm from Service A to B and C goes through the envoys
+
+### Lecture 26 - Demo: Istio
