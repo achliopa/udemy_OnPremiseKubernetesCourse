@@ -760,3 +760,91 @@ path "secret/myapp/*" {
 * we get the secret from vault hitting the api `curl -k -H 'X-Vault-Token: <token>' https://example:8200/v1/secret/myapp/mypassword` passing the token
 * reply comes as JSON
 * token accesor is atoken to be used by admins to check if a token exists
+
+## Section 11 - OpenShift Origin
+
+### Lecture 35 - Introduction to OpenShift Origin
+
+* OpenShift Origin is a distribution of K8s. it bundles vanill k8s with a nice UI and adds patches and feats
+* It is optimized for continuous app development and multi-tenancy
+* It adds developer and ops centric tools
+* Openshift Origin is the upstream community project that powers Openshift
+* It uses K8s, Docker and Project Atomic (a barebone container linux operating systemn)
+* The Openshift Architecture (multi-node):
+	* Developer uses Git/SVN to push the app on Openshift
+	* Openshift is a K8s cluster. master+slave nodes
+	* Master runs: APV Authentication, Sata Store, Scheduler, Management/Rplication on RedHat enterprize linux or atomic host
+	* Nodes run the pods on RHEL or Atomic. There are normal nodes anf Infrastructure Nodes
+	* On infranodes. openshif deploys its own tools (registry, proxies)
+	* It uses ceph storage, gluster storage or other
+	* Developers uses the UI.
+	* There isan optional CI?CD system on jenkinbs that runs on master node
+	* it runs on anything
+* It has a quck setup running openshift in a container
+* With `oc cluster up`, we can bring up the k8s cluster with the openshift command
+* using teh web frontend we can create apps and projects (nodejs, mysql etc)
+* it uses a git repo to build and push docker images
+* we can integrate with Jenkins putting jenkins files in the project
+* It hides k8s complexity.
+* Openshift has its own implementation of:
+	* Handling Storage (eg ceph)
+	* Handling authentication (plugin to openshift)
+	* Integrating CI, Ingress, loadBalancing
+* Its opinionated. we have to follow Openshift way
+* Use Openshift if we need a complete system that integrates CI/CD and K8s and hosted platforms are not an option
+* If we dont  want to design and deliver a custom delivery platform fro decvs and we are ok with Openshift way
+* give devs an easy PaaS solution
+
+### Lecture 36 - Demo: Install Openshift
+
+* we will create a new clean node on digitalocean (8gb ram CentOS 7.5) tag it kubernetes-cluster and use the firewall
+* we ssh in it as root and clone the course repo
+* we need to install git first `yum -y install git`
+* we go to on-prem-or-cloud-agnostic-kubernetes/openshift and see READM for instruction
+* we install docker
+```
+yum -y install docker
+systemctl enable docker
+systemctl start docker
+```
+
+* we look in /etc/docker/daemon.json its empty. we
+
+```
+echo '{
+   "insecure-registries": [
+     "172.30.0.0/16"
+   ]
+}' > /etc/docker/daemon.json
+```
+* to add an insecure registry for our kubernetes cluster to use openshift docker images
+* we `systemctl daemon-reload` and restart docker `systemctl restart docker`
+* install openshift `curl -o ~/openshift-origin-client-tools-v3.9.0-191fece-linux-64bit.tar.gz -L https://github.com/openshift/origin/releases/download/v3.9.0/openshift-origin-client-tools-v3.9.0-191fece-linux-64bit.tar.gz`
+* we move to home dir
+* we untar `tar -xzvf openshift-origin-client-tools-v3.9.0-191fece-linux-64bit.tar.gz`
+* we export the executable to path `export PATH=$PATH:~/openshift-origin-client-tools-v3.9.0-191fece-linux-64bit
+` and put it into bash proifile `echo 'export PATH=$PATH:~/openshift-origin-client-tools-v3.9.0-191fece-linux-64bit' >> .bash_profile` so its valid when we relogin
+* oc is now available and we start the cluster `oc cluster up --public-hostname=$(curl -s ifconfig.co) --host-data-dir=/data` this fetches openshift image it launches it and we can use it
+* it gives us instruct how to connect
+```
+The server is accessible via web console at:
+    https://157.230.112.102:8443
+
+You are logged in as:
+    User:     developer
+    Password: <any value>
+
+To login as administrator:
+    oc login -u system:admin
+```
+
+### Lecture 37 - Demo: Running an App in Openshift Origin
+
+* i visit the url with browser and login as developer
+* i get a dev dashboard where i can install apps, languages etc on the cluster (k8s cluster underneath)
+* we can deploy using a docker image or a k8s YAML file
+* i create a project (myapp) and click create. i click on it and see the dashboard. i browse catalog and select mysql. i leave default and create. i get my credentials
+* i select from catalog a nodejs app => next => i can select a git repo to clone code from a node project on github select the sample project. and click create. it build the project
+* on overview myapp openshift configs an external route for testing
+
+## Thats it!!
