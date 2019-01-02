@@ -693,8 +693,70 @@ kubectl apply -f https://docs.projectcalico.org/v3.1/getting-started/kubernetes/
 
 ### Lecture 33 - Introduction to Vault
 
-* 
+* vault is a tool for managing secrets (passwords,api keys, ssh keys, certificates)
+* its opensoource and released by Hashicorp (like vagrant and terraform)
+* Its used for:
+	* general secret storage
+	* employee credential storage (sharing credentials,but using audit log, with ability to roll over credentials)
+	* API key generation for Scripts (Dynamic Secrets) 
+	* Data Encryption/Decryption
+* Vault Features:
+	* Secure Secret Storage: (Encrypted key-value pairs can be stored in Vault)
+	* Dynamic Secrets: (Vault can create on-demand secrets and revoke them after aperiod of time, eg when client lease is up) eg, E.g AWS credentials to access S3 bucket
+	* Data Encryption: vault can encrypt/decrypt data without storing them
+	* Leasing and Renewal: secrets in vault have alease (a time to live). when lease is up secret will be revoked (deleted)
+	* Revocation: easy revocation feats. e.g all secrets of a user can be removed
+* Vault Operator was released in April 2018 from CoreOS
+	* it allows easy deployment of Vault on K8s
+	* it allows configuration and maintenace of Vault int he k8s API (using YAML and kubectl)
+	* gives agood alternative to secret managements tools on public cloud (like AWS Secrets manager or AWS Params store)
+
 
 ### Lecture 34 - Demo: Vault
 
-* 
+* we are on master node. we go to on-prem-or-cloud-agnostic-kubernetes/vault and look in README
+* we first have to deploy etcd operator.
+* we `kubectl create -f etcd-rbac.yaml` . it creaes aserviceaccount a role on default namespacegiving control ofer etcd CRDs, various k8s resources and to get secrets. and a rolebinding between the role and the serviceaccount
+* we `kubectl create -f etcd_crds.yaml` creates etcd CRDs (EtcdCluster, EtcdBackup, EtcdRestore )
+* we `kubectl create -f etcd-operator-deploy.yaml` deploys the etcd operator.
+* we check and we have a running etcd operator pod
+* we can now deploy vault
+* we `kubectl create -f vault-rbac.yaml `, a service acount named vault, a role giving full control over etcs, vault services, storageclasses and other K8s resources, a Rolebinding between the ROle and ServiceAccount on default namespace
+* we `kubectl create -f vault_crd.yaml ` it creates VaultService CRD
+* we `kubectl create -f vault-deployment.yaml` deploys the valut operator pod
+* we will now create a vault+etcd cluster (VaultService) with `kubectl create -f example_vault.yaml`. it spins an etcd cluster for backend and an example vault (etcd cluster needs 3 nodes)
+* we need to install the vault cli . we get it `wget https://releases.hashicorp.com/vault/0.10.1/vault_0.10.1_linux_amd64.zip`
+* we install unzip `sudo apt-get -y install unzip` and unzip it `unzip vault_0.10.1_linux_amd64.zip`
+* we make vault executable `chmod +x vault` and move it to usr/local `sudo mv vault /usr/local/bin`
+* vault is now available as tool
+* we need to initialize the vault cluster `kubectl get vault example -o jsonpath='{.status.vaultStatus.sealed[0]}' | xargs -0 -I {} kubectl -n default port-forward {} 8200`
+* we open a new terminal on master and export the vars
+```
+export VAULT_ADDR='https://localhost:8200'
+export VAULT_SKIP_VERIFY="true"
+```
+* we can now check the status of the  vault cluster `vault status` (vault is not yet initialized)
+* we initialize it with `vault operator init` and it gives us a set of unseal keys (5 keys) to unseal the vault and a root token (passowrd)
+* we need 3 of 5 keys to unseal the vault
+* we need to unseal it to use it . we unseal with `vault operator unseal` passin one of the keys *we need to do it 3 times
+* after that its not sealed anymore., we can use it
+* we do `vault login <ROOTTOKEN>` to give us root access to the vault
+* we can now create a secret. to create a secret we need to write to the master node. we stop the first portforwarding and use this one `kubectl -n default get vault example -o jsonpath='{.status.vaultStatus.active}' | xargs -0 -I {} kubectl -n default port-forward {} 8200` only the active node has write rights
+* we write a secret (in master) `vault write secret/myapp/mypassword value=pass123`
+* we can read it back `vault read secret/myapp/mypassword `
+* to create a new user without root rights we need to  create a policy `vault write sys/policy/my-policy policy=@policy.hcl`
+* policy.hcl content (read a segment of vault)
+```
+path "secret/myapp/*" {
+  capabilities = ["read"]
+}
+
+```
+* we then create the policy with a name `vault token create -policy=my-policy` this returns a token and token accesor with certain duration.
+* we will use the token from our app to access the data using an API. the app is vault agnostic
+* we dont need port forwarding when we are in the cluster
+* we run an ubuntu image and get into the shell `kubectl run --image ubuntu -it --rm ubuntu`
+* we install curl `apt-get update && apt-get -y install curl`
+* we get the secret from vault hitting the api `curl -k -H 'X-Vault-Token: <token>' https://example:8200/v1/secret/myapp/mypassword` passing the token
+* reply comes as JSON
+* token accesor is atoken to be used by admins to check if a token exists
