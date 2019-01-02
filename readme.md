@@ -664,4 +664,37 @@ spec:
 
 ### Lecture 31 - Demo: ingress Network Policies
 
+* we are on master
+* we have installed calico with the install-kubernetes.sh script and used VxLAN with flannel
+```
+# DigitalOcean with firewall (VxLAN with Flannel) - could be resolved in the future by allowing IP-in-IP in the firewall settings
+echo "deploying kubernetes (with canal)..."
+kubeadm init --pod-network-cidr=10.244.0.0/16 # add --apiserver-advertise-address="ip" if you want to use a different IP address than the main server IP
+export KUBECONFIG=/etc/kubernetes/admin.conf
+kubectl apply -f https://docs.projectcalico.org/v3.1/getting-started/kubernetes/installation/hosted/canal/rbac.yaml
+kubectl apply -f https://docs.projectcalico.org/v3.1/getting-started/kubernetes/installation/hosted/canal/canal.yaml
+```
+* we used canal that is calico+flannel
+* the network policies we will apply are in folder on-prem-or-cloud-agnostic-kubernetes/calico
+* we will start an nginx service and expose it with nodeport `kubectl create -f nginx.yml`
+* we hit nodeport from otside and it works
+* we will apply network policy isolation with `kubectl create -f networkpolicy-isolation.yml` we cannot access anymore
+* we try to reach the pod in k8s witha busybox `kubectl run -it --rm -l app=access-nginx --image busybox busybox` issuing command ` wget nginx -O-` no access
+* we will apply anothe network policy for nginx `kubectl create -f networkpolicy-nginx.yml` it allows conn from  any pod labeled access-nginx on port 80. we run busybox and wget and it works because we have the label in the pod
+
+### Lecture 32 - Demo: Egress Network Policies
+
+* we do isolation for egress (outbound comm)  `kubectl replace -f networkpolicy-isolation-egress.yml` blocking all comm
+* we log in busybox  pinging google. no succes
+* we apply `kubectl create -f networkpolicy-allow-egress.yml` to allow egress. we allow access to google ip range and also to the clusters dns service (opening its ports) so that at least we can call services by name. rule applies only for pod with label app=egress.
+* we create a busybox pod `kubectl run -it --rm -l app=egress --image busybox busybox` we can ping 8.8.8.8 and resolve hostnames (DNS service)
+
+## Section 10 - Vault
+
+### Lecture 33 - Introduction to Vault
+
+* 
+
+### Lecture 34 - Demo: Vault
+
 * 
